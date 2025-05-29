@@ -1,5 +1,7 @@
 package dev.drawethree.xprison.utils.misc;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -38,20 +40,22 @@ public class MathUtils {
 		return prefix + format + suffix;
 	}
 
+	@NotNull
 	public static String formatNumberNoDecimals(double amount) {
 		boolean negative = amount < 0;
 		String prefix = negative ? "-" : "";
 
 		if (negative) amount = Math.abs(amount);
-		if (amount < 1000) return prefix + (int) amount;
+		if (amount < 1000) return prefix + String.format("%.0f", amount);
 
 		List<String> suffixes = Arrays.asList("", "K", "M", "B", "T", "q", "Q", "QT", "S", "SP", "O", "N", "D");
 		int index = (int) (Math.log10(amount) / 3);
 		double scaled = amount / Math.pow(1000, index);
 
-		String formatted = String.format("%.0f", scaled);
+		String formatted = (scaled % 1 == 0) ? String.format("%.0f", scaled) : String.format("%.1f", scaled);
 		return prefix + formatted + suffixes.get(index);
 	}
+
 
 	private MathUtils() {
 		throw new UnsupportedOperationException("Cannot instantiate");

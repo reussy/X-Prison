@@ -2,16 +2,19 @@ package dev.drawethree.xprison.enchants.listener;
 
 import dev.drawethree.xprison.enchants.XPrisonEnchants;
 import dev.drawethree.xprison.enchants.gui.EnchantGUI;
+import dev.drawethree.xprison.enchants.managers.EnchantsManager;
 import dev.drawethree.xprison.utils.Constants;
 import dev.drawethree.xprison.utils.compat.MinecraftVersion;
 import dev.drawethree.xprison.utils.inventory.InventoryUtils;
 import lombok.Getter;
 import me.lucko.helper.Events;
+import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.*;
@@ -44,6 +47,7 @@ public class EnchantsListener {
 		this.subscribeToPlayerRespawnEvent();
 		this.subscribeToInventoryClickEvent();
 		this.subscribeToPlayerJoinEvent();
+		this.subscribeToPickaxeMoveInInventory();
 		this.subscribeToPlayerDropItemEvent();
 		this.subscribeToPlayerInteractEvent();
 		this.subscribeToPlayerItemHeldEvent();
@@ -79,6 +83,82 @@ public class EnchantsListener {
 
 				}).bindWith(this.plugin.getCore());
 	}
+
+	/**
+	 * Subscribes and handles the {@link InventoryClickEvent} to manage equipping and unequipping pickaxes
+	 * in the player's inventory.
+	 * This method listens for various inventory click actions, processes relevant
+	 * interactions with pickaxes, and triggers the appropriate equipped or unequip logic based on the type of action.
+	 * <p>
+	 * Key behaviors handled by this method:
+	 * - Detects when a pickaxe is unequipped by removing it from the held slot via a click.
+	 * - Identifies when a pickaxe is equipped by placing it into the held slot using the cursor.
+	 * - Handles equipping a pickaxe into the held slot using a hotbar number key.
+	 * - Handles unequipping a pickaxe from the held slot using a hotbar number key.
+	 * <p>
+	 * The appropriate actions for equipping and unequip are managed through the {@link EnchantsManager} of the plugin,
+	 * which handles enchantment-specific processes.
+	 * Debug information about equipping and unequipping is logged
+	 * for the plugin's core if debugging is enabled.
+	 * <p>
+	 * Event subscription is registered with the highest priority using the {@link EventPriority#HIGHEST}, ensuring
+	 * it runs after other event listeners.
+	 * The event is filtered to ensure interaction comes from a player.
+	 */
+	private void subscribeToPickaxeMoveInInventory() {
+		Events.subscribe(InventoryClickEvent.class, EventPriority.HIGHEST)
+				.filter(e -> e.getWhoClicked() instanceof Player)
+				.handler(e -> {
+					Player player = (Player) e.getWhoClicked();
+					int heldSlot = player.getInventory().getHeldItemSlot();
+					int clickedSlot = e.getSlot();
+					ClickType clickType = e.getClick();
+					ItemStack current = e.getCurrentItem();
+					ItemStack cursor = e.getCursor();
+
+					// Unequip inmediato con click
+					if (clickedSlot == heldSlot &&
+							current != null &&
+							this.plugin.getCore().isPickaxeSupported(current)) {
+						this.plugin.getCore().debug("Unequipped pickaxe (click): " + current.getType(), this.plugin);
+						this.plugin.getEnchantsManager().handlePickaxeUnequip(player, current);
+					}
+
+					// Equip inmediato con click
+					if (clickedSlot == heldSlot &&
+							cursor != null &&
+							this.plugin.getCore().isPickaxeSupported(cursor)) {
+						this.plugin.getCore().debug("Equipped pickaxe (click): " + cursor.getType(), this.plugin);
+						this.plugin.getEnchantsManager().handlePickaxeEquip(player, cursor);
+					}
+
+					// Si es NUMBER_KEY, manejar con 1 tick delay
+					if (clickType == ClickType.NUMBER_KEY) {
+						int hotbarButton = e.getHotbarButton();
+
+						// Guardamos el item actual en la mano ANTES del cambio
+						ItemStack oldItemInHand = player.getInventory().getItem(heldSlot);
+
+						Bukkit.getScheduler().runTaskLater(this.plugin.getCore(), () -> {
+							ItemStack newItemInHand = player.getInventory().getItem(heldSlot);
+
+							boolean wasPickaxe = oldItemInHand != null && this.plugin.getCore().isPickaxeSupported(oldItemInHand);
+							boolean isNowPickaxe = newItemInHand != null && this.plugin.getCore().isPickaxeSupported(newItemInHand);
+
+							if (wasPickaxe && (!isNowPickaxe || oldItemInHand != newItemInHand)) {
+								this.plugin.getCore().debug("Unequipped pickaxe (key delayed): " + oldItemInHand.getType(), this.plugin);
+								this.plugin.getEnchantsManager().handlePickaxeUnequip(player, oldItemInHand);
+							}
+
+							if (isNowPickaxe && (!wasPickaxe || oldItemInHand != newItemInHand)) {
+								this.plugin.getCore().debug("Equipped pickaxe (key delayed): " + newItemInHand.getType(), this.plugin);
+								this.plugin.getEnchantsManager().handlePickaxeEquip(player, newItemInHand);
+							}
+						}, 1L);
+					}
+				}).bindWith(this.plugin.getCore());
+	}
+
 
 	private void subscribeToPlayerInteractEvent() {
 		Events.subscribe(PlayerInteractEvent.class)

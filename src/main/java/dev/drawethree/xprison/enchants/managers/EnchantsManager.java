@@ -262,7 +262,6 @@ public class EnchantsManager {
 	}
 
 	public void handlePickaxeUnequip(@NotNull Player p, ItemStack newItem) {
-		if (plugin.getEnchantsConfig().getYamlConfig().getStringList("world.disabled-worlds").contains(p.getWorld().getName())) return;
         forEachEffectiveEnchant(p, newItem, (enchant, level) -> enchant.onUnequip(p, newItem, level));
 	}
 
