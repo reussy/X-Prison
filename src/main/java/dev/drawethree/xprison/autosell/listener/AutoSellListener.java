@@ -51,10 +51,13 @@ public class AutoSellListener {
                 .filter(e -> !e.isCancelled() && e.getPlayer().getItemInHand() != null && this.plugin.getCore().isPickaxeSupported(e.getPlayer().getItemInHand()))
                 .handler(e -> {
 
-                    SellRegion sellRegion = this.plugin.getManager().getAutoSellRegion(e.getBlock().getLocation());
+                    if (plugin.getCore().getAutoSell().getAutoSellConfig().getYamlConfig().getBoolean("use-regions")) {
 
-                    if (sellRegion == null) {
-                        return;
+                        SellRegion sellRegion = this.plugin.getManager().getAutoSellRegion(e.getBlock().getLocation());
+
+                        if (sellRegion == null) {
+                            return;
+                        }
                     }
 
                     boolean success = false;
@@ -68,7 +71,7 @@ public class AutoSellListener {
                     }
 
                     if (success) {
-                        // Do not set block to air due compatibility issues
+                        // Do not set block to air due to compatibility issues
                         e.setDropItems(false);
                     } else {
                         e.setCancelled(true);

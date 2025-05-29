@@ -334,13 +334,23 @@ public class AutoSellManager {
 
     public boolean autoSellBlock(Player player, Block block) {
 
-        SellRegion sellRegion = this.getAutoSellRegion(block.getLocation());
+        SellRegion sellRegion = null;
+        Map<AutoSellItemStack, Double> itemsToSell;
+        if (plugin.getCore().getAutoSell().getAutoSellConfig().getYamlConfig().getBoolean("use-regions")) {
+            sellRegion = this.getAutoSellRegion(block.getLocation());
 
-        if (sellRegion == null) {
-            return false;
+            if (sellRegion == null) {
+                return false;
+            }
+
+           itemsToSell = sellRegion.previewItemsSell(List.of(createItemStackToGive(player, block)));
+        }else {
+            sellRegion = this.getAutoSellRegion(player.getLocation());
+            if (sellRegion == null) {
+                return false;
+            }
+            itemsToSell = sellRegion.previewItemsSell(List.of(createItemStackToGive(player, block)));
         }
-
-        Map<AutoSellItemStack, Double> itemsToSell = sellRegion.previewItemsSell(Arrays.asList(createItemStackToGive(player, block)));
 
         XPrisonAutoSellEvent event = this.callAutoSellEvent(player, sellRegion, itemsToSell);
 

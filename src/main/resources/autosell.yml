@@ -22,6 +22,7 @@ auto_sell_broadcast:
     - " &8&l➥ &e&lITEMS SOLD: &f%items%"
     - "&e&m-------&f&m-------&e&m--------&f&m--------&e&m--------&f&m-------&e&m-------"
 # Sellprices for each regions
+use-regions: false
 regions: { }
 # Notification when player has full inventory
 # If 'title' is set, it will send title to players, otherwise it will display chat message.
