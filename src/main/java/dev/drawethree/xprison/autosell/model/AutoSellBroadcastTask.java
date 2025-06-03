@@ -1,6 +1,7 @@
 package dev.drawethree.xprison.autosell.model;
 
 import dev.drawethree.xprison.autosell.XPrisonAutoSell;
+import dev.drawethree.xprison.utils.NumberUtils;
 import dev.drawethree.xprison.utils.player.PlayerUtils;
 import me.lucko.helper.Schedulers;
 import me.lucko.helper.scheduler.Task;
@@ -40,7 +41,11 @@ public final class AutoSellBroadcastTask implements Runnable {
 
     private void sendAutoSellBroadcastMessage(Player p, double lastEarnings, long lastItems) {
         for (String s : this.plugin.getAutoSellConfig().getAutoSellBroadcastMessage()) {
-            PlayerUtils.sendMessage(p, s.replace("%money%", String.format("%,.0f", lastEarnings)).replace("%items%", String.format("%,d", lastItems)));
+            PlayerUtils.sendMessage(p, s
+                    .replace("%money%", String.format("%,.0f", lastEarnings))
+                    .replace("%money_format%", NumberUtils.format(lastEarnings))
+                    .replace("%items_format%", NumberUtils.format(lastItems))
+                    .replace("%items%", String.format("%,d", lastItems)));
         }
     }
 

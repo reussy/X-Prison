@@ -6,6 +6,7 @@ import dev.drawethree.xprison.autosell.api.events.XPrisonSellAllEvent;
 import dev.drawethree.xprison.autosell.model.AutoSellItemStack;
 import dev.drawethree.xprison.autosell.model.SellRegion;
 import dev.drawethree.xprison.autosell.utils.AutoSellContants;
+import dev.drawethree.xprison.enchants.model.impl.FortuneEnchant;
 import dev.drawethree.xprison.enchants.utils.EnchantUtils;
 import dev.drawethree.xprison.multipliers.enums.MultiplierType;
 import dev.drawethree.xprison.utils.compat.CompMaterial;
@@ -18,6 +19,7 @@ import me.lucko.helper.cooldown.Cooldown;
 import me.lucko.helper.cooldown.CooldownMap;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.configuration.ConfigurationSection;
@@ -37,6 +39,7 @@ public class AutoSellManager {
     private final XPrisonAutoSell plugin;
     private final Map<UUID, Double> lastEarnings;
     private final Map<UUID, Long> lastItems;
+    private final HashMap<Material, Double> cachePrices;
     private final Map<String, SellRegion> regionsAutoSell;
     private final List<UUID> enabledAutoSellPlayers;
     private final Map<String, Set<String>> notLoadedSellRegions;
@@ -47,24 +50,31 @@ public class AutoSellManager {
         this.lastEarnings = new HashMap<>();
         this.lastItems = new HashMap<>();
         this.regionsAutoSell = new HashMap<>();
+        cachePrices = new HashMap<>();
         this.notLoadedSellRegions = new HashMap<>();
     }
 
 
-    private void loadAutoSellRegions() {
+    private void loadAll() {
         this.regionsAutoSell.clear();
-
+        this.cachePrices.clear();
         YamlConfiguration configuration = this.plugin.getAutoSellConfig().getYamlConfig();
-
         ConfigurationSection section = configuration.getConfigurationSection("regions");
-
-        if (section == null) {
-            return;
-        }
-
+        if (section == null) return;
         for (String regName : section.getKeys(false)) {
             this.loadSellRegionFromConfig(configuration, regName);
         }
+
+
+        ConfigurationSection sectionBlocks = configuration.getConfigurationSection("blocks");
+        if (sectionBlocks == null) return;
+        sectionBlocks.getKeys(false).forEach(keySec -> {
+            Material mate = Material.getMaterial(keySec);
+            double price = sectionBlocks.getDouble(keySec);
+            if (mate == null) return;
+            cachePrices.putIfAbsent(mate, price);
+        });
+
     }
 
     private boolean loadSellRegionFromConfig(YamlConfiguration config, String regionName) {
@@ -125,13 +135,34 @@ public class AutoSellManager {
     }
 
     public void load() {
-        this.loadAutoSellRegions();
+        this.loadAll();
     }
 
 
     public void sellAll(Player sender, IWrappedRegion region) {
 
-        if (!this.validateRegionBeforeSellAll(sender, region)) {
+        Map<AutoSellItemStack, Double> itemsToSell = new HashMap<>();
+        for (var item : sender.getInventory().getContents()) {
+            if (item == null) {
+                continue;
+            }
+            var blockType = item.getType();
+            if (cachePrices.containsKey(blockType)) {
+                var price = cachePrices.get(blockType);
+                itemsToSell.put(new AutoSellItemStack(item), price);
+            }
+        }
+
+        XPrisonSellAllEvent event = this.callSellAllEvent(sender, null, itemsToSell);
+        if (event.isCancelled()) return;
+        itemsToSell = event.getItemsToSell();
+        double totalAmount = this.sellItems(sender, itemsToSell);
+        itemsToSell.keySet().forEach(sellItem -> sender.getInventory().remove(sellItem.getItemStack()));
+
+        if (totalAmount > 0.0) {
+            PlayerUtils.sendMessage(sender, this.plugin.getAutoSellConfig().getMessage("sell_all_complete").replace("%price%", String.format("%,.0f", totalAmount)));
+        }
+        /*if (!this.validateRegionBeforeSellAll(sender, region)) {
             return;
         }
 
@@ -159,7 +190,7 @@ public class AutoSellManager {
 
         if (totalAmount > 0.0) {
             PlayerUtils.sendMessage(sender, this.plugin.getAutoSellConfig().getMessage("sell_all_complete").replace("%price%", String.format("%,.0f", totalAmount)));
-        }
+        }*/
     }
 
     private double sellItems(Player player, Map<AutoSellItemStack, Double> itemsToSell) {
@@ -241,10 +272,11 @@ public class AutoSellManager {
     }
 
     public double getPriceForItem(String regionName, ItemStack item) {
-        SellRegion region = regionsAutoSell.get(regionName);
+        if (cachePrices.containsKey(item.getType())) return cachePrices.get(item.getType());
+        /*SellRegion region = regionsAutoSell.get(regionName);
         if (region != null) {
             return region.getPriceForItem(item);
-        }
+        }*/
         return 0.0;
     }
 
@@ -298,12 +330,12 @@ public class AutoSellManager {
             return true;
         }
 
-        player.getInventory().addItem(createItemStackToGive(player, block));
+        player.getInventory().addItem(new ItemStack(block.getType(), 1));
         return true;
     }
 
     private ItemStack createItemStackToGive(Player player, Block block) {
-        int amount = EnchantUtils.getFortuneBlockCount(player.getItemInHand(), block);
+        int amount = FortuneEnchant.getBonusMultiplier(EnchantUtils.getItemFortuneLevel(player.getItemInHand()));
 
         ItemStack toGive;
 
@@ -333,8 +365,28 @@ public class AutoSellManager {
     }
 
     public boolean autoSellBlock(Player player, Block block) {
+        var config = plugin.getAutoSellConfig().getYamlConfig();
+        var blockType = block.getType().name();
+        if (!config.contains("blocks."+blockType)) return false;
+        var priceAmount = config.getDouble("blocks."+blockType, 0);
 
-        SellRegion sellRegion = null;
+        Map<AutoSellItemStack, Double> itemsToSell = new HashMap<>();
+        itemsToSell.put(new AutoSellItemStack(createItemStackToGive(player, block)), priceAmount);
+
+        var event = this.callAutoSellEvent(player, null, itemsToSell);
+        if (event.isCancelled()) {
+            return false;
+        }
+
+        itemsToSell = event.getItemsToSell();
+
+        int amountOfItems = itemsToSell.keySet().stream().mapToInt(item -> item.getItemStack().getAmount()).sum();
+        double moneyEarned = this.sellItems(player, itemsToSell);
+
+        this.updateCurrentEarningsAndLastItems(player, moneyEarned, (amountOfItems+1));
+        return true;
+
+        /*SellRegion sellRegion = null;
         Map<AutoSellItemStack, Double> itemsToSell;
         if (plugin.getCore().getAutoSell().getAutoSellConfig().getYamlConfig().getBoolean("use-regions")) {
             sellRegion = this.getAutoSellRegion(block.getLocation());
@@ -344,7 +396,7 @@ public class AutoSellManager {
             }
 
            itemsToSell = sellRegion.previewItemsSell(List.of(createItemStackToGive(player, block)));
-        }else {
+        } else {
             sellRegion = this.getAutoSellRegion(player.getLocation());
             if (sellRegion == null) {
                 return false;
@@ -365,7 +417,7 @@ public class AutoSellManager {
 
         this.updateCurrentEarningsAndLastItems(player, moneyEarned, amountOfItems);
 
-        return true;
+        return true;*/
     }
 
     private void updateCurrentEarningsAndLastItems(Player player, double moneyEarned, int amountOfItems) {
@@ -384,20 +436,22 @@ public class AutoSellManager {
     }
 
     public double getPriceForBlock(String regionName, Block block) {
-        CompMaterial material = CompMaterial.fromBlock(block);
+        if (cachePrices.containsKey(block.getType())) return cachePrices.get(block.getType());
+        /*CompMaterial material = CompMaterial.fromBlock(block);
         SellRegion region = regionsAutoSell.get(regionName);
         if (region != null) {
             return region.getSellPriceForMaterial(material);
-        }
+        }*/
         return 0.0;
     }
 
     public double getPriceForBlock(Block block) {
-        CompMaterial material = CompMaterial.fromBlock(block);
+        if (cachePrices.containsKey(block.getType())) return cachePrices.get(block.getType());
+        /*CompMaterial material = CompMaterial.fromBlock(block);
         SellRegion region = getAutoSellRegion(block.getLocation());
         if (region != null) {
             return region.getSellPriceForMaterial(material);
-        }
+        }*/
         return 0.0;
     }
 

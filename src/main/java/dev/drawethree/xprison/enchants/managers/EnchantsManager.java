@@ -233,7 +233,7 @@ public class EnchantsManager {
     public void forEachEffectiveEnchant(Player player, ItemStack item, BiConsumer<XPrisonEnchantment, Integer> consumer) {
         for (var entry : this.getItemEnchants(item).entrySet()) {
             final XPrisonEnchantment enchant = entry.getKey();
-            if (enchant.isEnabled() && !player.hasPermission(EXCLUDE_PERMISSION + enchant.getRawName())) {
+            if (enchant.isEnabled()) {
                 consumer.accept(enchant, entry.getValue());
             }
         }
