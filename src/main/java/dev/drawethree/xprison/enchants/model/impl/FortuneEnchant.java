@@ -69,11 +69,14 @@ public final class FortuneEnchant extends XPrisonEnchantment {
         int baseAmount = 1;
         int bonus = getBonusMultiplier(enchantLevel);
 
-        ItemStack drop = new ItemStack(dropType, baseAmount + bonus);
-        e.getPlayer().getInventory().addItem(drop);
+
+        if (!this.plugin.getCore().getAutoSell().getManager().hasAutoSellEnabled(e.getPlayer())) {
+            ItemStack drop = new ItemStack(dropType, baseAmount + bonus);
+            e.getPlayer().getInventory().addItem(drop);
+        }
     }
 
-    private int getBonusMultiplier(int level) {
+    public static int getBonusMultiplier(int level) {
         // Suave hasta 5x como máximo en nivel 100
         double multiplier = 1 + (Math.log(level + 1) / Math.log(100 + 1)) * 4; // Escala logarítmica
         return (int) Math.floor(multiplier) - 1; // Bonus extra sobre base 1

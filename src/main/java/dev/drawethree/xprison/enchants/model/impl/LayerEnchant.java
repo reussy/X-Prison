@@ -8,6 +8,7 @@ import dev.drawethree.xprison.enchants.utils.EnchantUtils;
 import dev.drawethree.xprison.mines.model.mine.Mine;
 import dev.drawethree.xprison.multipliers.enums.MultiplierType;
 import dev.drawethree.xprison.utils.Constants;
+import dev.drawethree.xprison.utils.MineUtils;
 import dev.drawethree.xprison.utils.compat.CompMaterial;
 import dev.drawethree.xprison.utils.misc.RegionUtils;
 import me.lucko.helper.Events;
@@ -85,21 +86,11 @@ public final class LayerEnchant extends XPrisonEnchantment {
             return;
         }
 
-        if (this.useEvents) {
-            final List<BlockBreakEvent> ignored = this.plugin.getEnchantsListener().getIgnoredEvents();
-            blocksAffected = event.getBlocksAffected().stream().filter(block -> {
-                final BlockBreakEvent blockEvent = new BlockBreakEvent(block, p);
-                ignored.add(blockEvent);
-                Bukkit.getPluginManager().callEvent(blockEvent);
-                ignored.remove(blockEvent);
-                return !e.isCancelled();
-            }).collect(Collectors.toList());
-        } else {
-            blocksAffected = event.getBlocksAffected();
-        }
+        blocksAffected = event.getBlocksAffected();
 
         if (!this.plugin.getCore().isUltraBackpacksEnabled()) {
             handleAffectedBlocks(p, region, blocksAffected);
+            MineUtils.addBlocks(p, blocksAffected);
         } else {
             UltraBackpacksAPI.handleBlocksBroken(p, blocksAffected);
         }
@@ -154,8 +145,10 @@ public final class LayerEnchant extends XPrisonEnchantment {
 
             if (autoSellPlayerEnabled) {
                 totalDeposit += ((plugin.getCore().getAutoSell().getManager().getPriceForBlock(region.getId(), block) + 0.0) * amplifier);
+                plugin.getCore().getAutoSell().getManager().addToLastItems(p, amplifier);
             } else {
-                ItemStack itemToGive = CompMaterial.fromBlock(block).toItem(amplifier);
+                ItemStack itemToGive = CompMaterial.fromBlock(block).toItem(FortuneEnchant.getBonusMultiplier(amplifier));
+                if (itemToGive == null) continue;
                 p.getInventory().addItem(itemToGive);
             }
             block.setType(Material.AIR, true);

@@ -52,30 +52,26 @@ public class AutoSellListener {
                 .handler(e -> {
 
                     if (plugin.getCore().getAutoSell().getAutoSellConfig().getYamlConfig().getBoolean("use-regions")) {
-
                         SellRegion sellRegion = this.plugin.getManager().getAutoSellRegion(e.getBlock().getLocation());
-
                         if (sellRegion == null) {
                             return;
                         }
                     }
 
-                    boolean success = false;
-
+                    //boolean success = false;
                     if (this.plugin.getManager().hasAutoSellEnabled(e.getPlayer())) {
-                        success = this.plugin.getManager().autoSellBlock(e.getPlayer(), e.getBlock());
+                        this.plugin.getManager().autoSellBlock(e.getPlayer(), e.getBlock());
+                    } else {
+                        this.plugin.getManager().givePlayerItem(e.getPlayer(), e.getBlock());
                     }
 
-                    if (!success) {
-                        success = this.plugin.getManager().givePlayerItem(e.getPlayer(), e.getBlock());
-                    }
-
-                    if (success) {
+                    e.setDropItems(false);
+                    /*if (success) {
                         // Do not set block to air due to compatibility issues
                         e.setDropItems(false);
                     } else {
                         e.setCancelled(true);
-                    }
+                    }*/
                 }).bindWith(this.plugin.getCore());
     }
 }
